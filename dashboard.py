@@ -171,49 +171,40 @@ class IMS:
         self.update_content()
 
     # -------------- functions ----------------
-    def employee(self):
+    def _open_window(self, window_class):
         self.new_win = Toplevel(self.root)
-        self.new_obj = employeeClass(self.new_win)
+        self.new_obj = window_class(self.new_win)
+
+    def _table_count(self, cursor, table_name):
+        cursor.execute(f"select COUNT(*) from {table_name}")
+        return cursor.fetchone()[0]
+
+    def employee(self):
+        self._open_window(employeeClass)
 
     def supplier(self):
-        self.new_win = Toplevel(self.root)
-        self.new_obj = supplierClass(self.new_win)
+        self._open_window(supplierClass)
 
     def category(self):
-        self.new_win = Toplevel(self.root)
-        self.new_obj = categoryClass(self.new_win)
+        self._open_window(categoryClass)
 
     def product(self):
-        self.new_win = Toplevel(self.root)
-        self.new_obj = productClass(self.new_win)
+        self._open_window(productClass)
 
     def sales(self):
-        self.new_win = Toplevel(self.root)
-        self.new_obj = salesClass(self.new_win)
+        self._open_window(salesClass)
 
     def update_content(self):
-        con = sqlite3.connect(database=os.path.join(BASE_DIR, 'ims.db'))
-        cur = con.cursor()
-
         try:
-            cur.execute("select * from product")
-            product = cur.fetchall()
-            self.lbl_product.config(text=f"Total Product\n[ {len(product)} ]")
+            with sqlite3.connect(database=os.path.join(BASE_DIR, "ims.db")) as con:
+                cur = con.cursor()
+                self.lbl_product.config(text=f"Total Product\n[ {self._table_count(cur, 'product')} ]")
+                self.lbl_category.config(text=f"Total Category\n[ {self._table_count(cur, 'category')} ]")
+                self.lbl_employee.config(text=f"Total Employee\n[ {self._table_count(cur, 'employee')} ]")
+                self.lbl_supplier.config(text=f"Total Supplier\n[ {self._table_count(cur, 'supplier')} ]")
 
-            cur.execute("select * from category")
-            category = cur.fetchall()
-            self.lbl_category.config(text=f"Total Category\n[ {len(category)} ]")
-
-            cur.execute("select * from employee")
-            employee = cur.fetchall()
-            self.lbl_employee.config(text=f"Total Employee\n[ {len(employee)} ]")
-
-            cur.execute("select * from supplier")
-            supplier = cur.fetchall()
-            self.lbl_supplier.config(text=f"Total Supplier\n[ {len(supplier)} ]")
-
-            bill = len(os.listdir(BILL_DIR))
-            self.lbl_sales.config(text=f"Total Sales\n[ {bill} ]")
+            bill_files = [file_name for file_name in os.listdir(BILL_DIR) if file_name.endswith(".txt")]
+            self.lbl_sales.config(text=f"Total Sales\n[ {len(bill_files)} ]")
 
             time_ = time.strftime("%I:%M:%S")
             date_ = time.strftime("%d-%m-%Y")
@@ -221,7 +212,7 @@ class IMS:
                 text=f"Welcome to Inventory Management System\t\t Date: {date_}\t\t Time: {time_}"
             )
 
-            self.lbl_clock.after(200, self.update_content)
+            self.root.after(200, self.update_content)
 
         except Exception as ex:
             messagebox.showerror("Error", f"Error due to : {str(ex)}", parent=self.root)
