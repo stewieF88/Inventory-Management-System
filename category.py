@@ -3,6 +3,7 @@ from PIL import Image,ImageTk
 from tkinter import ttk,messagebox
 import sqlite3
 
+
 class categoryClass:
     def __init__(self,root):
         self.root=root
