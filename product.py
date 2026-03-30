@@ -2,6 +2,7 @@ from tkinter import *
 from tkinter import ttk, messagebox
 import os
 import sqlite3
+import time
 
 from create_db import create_db
 
@@ -268,6 +269,65 @@ class productClass:
             self.var_emp.get(),
         )
 
+    def _safe_int(self, value, default=0):
+        try:
+            return int(str(value).strip())
+        except (TypeError, ValueError):
+            return default
+
+    def _validated_price_qty(self):
+        try:
+            price = float(self.var_price.get().strip())
+            qty = int(self.var_qty.get().strip())
+        except ValueError:
+            messagebox.showerror(
+                "Error",
+                "Price must be numeric and quantity must be a whole number",
+                parent=self.root,
+            )
+            return None
+
+        if price < 0 or qty < 0:
+            messagebox.showerror("Error", "Price and quantity cannot be negative", parent=self.root)
+            return None
+        return price, qty
+
+    def _log_inventory_history(
+        self,
+        *,
+        source,
+        reference,
+        employee,
+        supplier,
+        product_id,
+        product_name,
+        category,
+        quantity,
+        unit_price,
+    ):
+        if quantity == 0:
+            return
+
+        line_total = float(quantity) * float(unit_price)
+        self._run_query(
+            "insert into inventory_history(source,reference,employee,supplier,product_id,product_name,category,quantity,unit_price,line_total,trans_date,trans_time) "
+            "values(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                source,
+                reference,
+                employee,
+                supplier,
+                int(product_id),
+                product_name,
+                category,
+                int(quantity),
+                float(unit_price),
+                line_total,
+                time.strftime("%d/%m/%Y"),
+                time.strftime("%H:%M:%S"),
+            ),
+        )
+
     def fetch_lookup_data(self):
         try:
             self.cat_list = ["Select"]
@@ -314,6 +374,11 @@ class productClass:
             messagebox.showerror("Error", "All fields are required", parent=self.root)
             return
 
+        validated = self._validated_price_qty()
+        if not validated:
+            return
+        unit_price, quantity = validated
+
         try:
             if self._run_query("select 1 from product where name=?", (product_name,), fetchone=True):
                 messagebox.showerror("Error", "Product already present", parent=self.root)
@@ -323,6 +388,19 @@ class productClass:
                 "insert into product(Category,Supplier,name,price,qty,status,employee) values(?,?,?,?,?,?,?)",
                 self._product_values(),
             )
+            row = self._run_query("select pid from product where name=?", (product_name,), fetchone=True)
+            if row:
+                self._log_inventory_history(
+                    source="PRODUCT",
+                    reference="STOCK-IN",
+                    employee=employee,
+                    supplier=supplier,
+                    product_id=row[0],
+                    product_name=product_name,
+                    category=category,
+                    quantity=quantity,
+                    unit_price=unit_price,
+                )
             messagebox.showinfo("Success", "Product Added Successfully", parent=self.root)
             self.clear()
         except Exception as ex:
@@ -358,8 +436,22 @@ class productClass:
             messagebox.showerror("Error", "Please select product from list", parent=self.root)
             return
 
+        validated = self._validated_price_qty()
+        if not validated:
+            return
+        unit_price, new_qty = validated
+        category = self.var_cat.get()
+        supplier = self.var_sup.get()
+        employee = self.var_emp.get()
+        product_name = self.var_name.get().strip()
+
         try:
-            if not self._run_query("select 1 from product where pid=?", (pid,), fetchone=True):
+            old_row = self._run_query(
+                "select qty from product where pid=?",
+                (pid,),
+                fetchone=True,
+            )
+            if not old_row:
                 messagebox.showerror("Error", "Invalid Product", parent=self.root)
                 return
 
@@ -367,6 +459,19 @@ class productClass:
                 "update product set Category=?,Supplier=?,name=?,price=?,qty=?,status=?,employee=? where pid=?",
                 self._product_values() + (pid,),
             )
+            qty_diff = new_qty - self._safe_int(old_row[0], default=0)
+            if qty_diff != 0:
+                self._log_inventory_history(
+                    source="PRODUCT",
+                    reference="STOCK-ADJUST",
+                    employee=employee,
+                    supplier=supplier,
+                    product_id=pid,
+                    product_name=product_name,
+                    category=category,
+                    quantity=qty_diff,
+                    unit_price=unit_price,
+                )
             messagebox.showinfo("Success", "Product Updated Successfully", parent=self.root)
             self.show()
         except Exception as ex:

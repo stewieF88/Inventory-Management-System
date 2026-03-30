@@ -71,6 +71,22 @@ def create_db():
             "bill_date text,"
             "bill_time text)"
         )
+        cur.execute(
+            "CREATE TABLE IF NOT EXISTS inventory_history("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "source text,"
+            "reference text,"
+            "employee text,"
+            "supplier text,"
+            "product_id INTEGER,"
+            "product_name text,"
+            "category text,"
+            "quantity INTEGER,"
+            "unit_price REAL,"
+            "line_total REAL,"
+            "trans_date text,"
+            "trans_time text)"
+        )
 
         # Existing databases can already have sales_history without supplier.
         if not _column_exists(cur, "sales_history", "supplier"):
@@ -81,6 +97,9 @@ def create_db():
         cur.execute("CREATE INDEX IF NOT EXISTS idx_sales_history_supplier ON sales_history(supplier)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_sales_history_product_name ON sales_history(product_name)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_sales_history_category ON sales_history(category)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_inventory_history_product_id ON inventory_history(product_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_inventory_history_employee ON inventory_history(employee)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_inventory_history_category ON inventory_history(category)")
         con.commit()
 
 

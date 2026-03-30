@@ -9,9 +9,14 @@ from create_db import create_db
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 BILL_DIR = os.path.join(BASE_DIR, "bill")
 DB_PATH = os.path.join(BASE_DIR, "ims.db")
-FILTER_COLUMN_MAP = {
+INVOICE_FILTER_COLUMN_MAP = {
     "Employee": "employee",
     "Product": "product_name",
+    "Category": "category",
+}
+TRANSACTION_FILTER_COLUMN_MAP = {
+    "Employee": "employee",
+    "Product": "product",
     "Category": "category",
 }
 
@@ -29,6 +34,7 @@ class salesClass:
         self.root.focus_force()
 
         self.invoice_list = []
+        self.transaction_meta = {}
         self.var_invoice = StringVar()
         self.var_filter_by = StringVar(value="Select")
         self.var_filter_txt = StringVar()
@@ -88,7 +94,17 @@ class salesClass:
         # Transaction history table (right side)
         history_frame = Frame(self.root, bd=3, relief=RIDGE)
         history_frame.place(x=710, y=130, width=360, height=340)
-        Label(history_frame, text="Transaction History", font=("goudy old style", 18), bg="#009688", fg="white").pack(side=TOP, fill=X)
+        history_header = Frame(history_frame, bg="#009688")
+        history_header.place(x=2, y=2, width=352, height=30)
+        Label(history_header, text="Transaction History", font=("goudy old style", 16), bg="#009688", fg="white").pack(side=LEFT, padx=6)
+        Button(
+            history_header,
+            text="Delete Tx",
+            command=self.delete_transaction,
+            font=("times new roman", 10, "bold"),
+            bg="#f44336",
+            fg="white",
+        ).pack(side=RIGHT, padx=4, pady=2)
 
         history_inner = Frame(history_frame, bd=1, relief=RIDGE)
         history_inner.place(x=2, y=35, width=352, height=300)
@@ -137,7 +153,7 @@ class salesClass:
 
     def _history_invoices(self, filter_by=None, filter_text=""):
         if filter_by and filter_text:
-            column_name = FILTER_COLUMN_MAP[filter_by]
+            column_name = INVOICE_FILTER_COLUMN_MAP[filter_by]
             rows = self._run_query(
                 f"select distinct invoice from sales_history where {column_name} LIKE ? order by id desc",
                 (f"%{filter_text}%",),
@@ -177,21 +193,42 @@ class salesClass:
         self._populate_invoices(history_invoices)
 
     def _load_transactions(self, filter_by=None, filter_text=""):
+        sales_query = (
+            "select sh.id as tx_id,sh.invoice as reference,COALESCE(sh.employee,'') as employee,"
+            "COALESCE(sh.supplier,COALESCE(p.Supplier,'')) as supplier,COALESCE(sh.product_name,'') as product,"
+            "COALESCE(sh.category,'') as category,-ABS(COALESCE(sh.quantity,0)) as qty,"
+            "-ABS(COALESCE(sh.line_total,0)) as amount,COALESCE(sh.bill_date,'') as tx_date,"
+            "COALESCE(sh.bill_time,'') as tx_time,'SALE' as tx_source "
+            "from sales_history sh left join product p on p.pid = sh.product_id"
+        )
+        stock_query = (
+            "select ih.id,COALESCE(ih.reference,'STOCK-IN'),COALESCE(ih.employee,''),"
+            "COALESCE(ih.supplier,''),COALESCE(ih.product_name,''),COALESCE(ih.category,''),"
+            "COALESCE(ih.quantity,0),COALESCE(ih.line_total,0),COALESCE(ih.trans_date,''),COALESCE(ih.trans_time,''),'STOCK' "
+            "from inventory_history ih"
+        )
         query = (
-            "select id,invoice,COALESCE(employee,''),COALESCE(supplier,''),COALESCE(product_name,''),"
-            "COALESCE(category,''),COALESCE(quantity,0),COALESCE(line_total,0) from sales_history"
+            "select tx_id,reference,employee,supplier,product,category,qty,amount,tx_date,tx_time,tx_source "
+            f"from ({sales_query} union all {stock_query}) tx"
         )
         params = []
         if filter_by and filter_text:
-            column_name = FILTER_COLUMN_MAP[filter_by]
-            query += f" where {column_name} LIKE ?"
+            column_name = TRANSACTION_FILTER_COLUMN_MAP[filter_by]
+            query += f" where tx.{column_name} LIKE ?"
             params.append(f"%{filter_text}%")
-        query += " order by id desc"
+        query += (
+            " order by "
+            "(substr(tx.tx_date,7,4)||substr(tx.tx_date,4,2)||substr(tx.tx_date,1,2)) desc,"
+            "replace(tx.tx_time,':','') desc,tx.tx_id desc"
+        )
 
         rows = self._run_query(query, tuple(params), fetchall=True)
         self.HistoryTable.delete(*self.HistoryTable.get_children())
+        self.transaction_meta = {}
         for row in rows:
-            self.HistoryTable.insert(
+            qty_value = int(row[6]) if row[6] is not None else 0
+            amount_value = float(row[7]) if row[7] is not None else 0.0
+            item_id = self.HistoryTable.insert(
                 "",
                 END,
                 values=(
@@ -201,10 +238,89 @@ class salesClass:
                     row[3],
                     row[4],
                     row[5],
-                    row[6],
-                    f"{float(row[7]):.2f}",
+                    f"{qty_value:+d}",
+                    f"{amount_value:+.2f}",
                 ),
             )
+            self.transaction_meta[item_id] = {
+                "id": int(row[0]),
+                "reference": str(row[1]),
+                "source": row[10],
+            }
+
+    def _delete_invoice_data(self, invoice):
+        file_path = os.path.join(BILL_DIR, f"{invoice}.txt")
+        file_deleted = False
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            file_deleted = True
+
+        with sqlite3.connect(DB_PATH) as con:
+            cur = con.cursor()
+            cur.execute("delete from sales_history where invoice=?", (invoice,))
+            history_deleted_count = cur.rowcount
+            con.commit()
+        return file_deleted, history_deleted_count
+
+    def _refresh_current_view(self):
+        filter_by = self.var_filter_by.get().strip()
+        filter_txt = self.var_filter_txt.get().strip()
+        if filter_by != "Select" and filter_txt:
+            self._load_invoices(filter_by, filter_txt)
+            self._load_transactions(filter_by, filter_txt)
+        else:
+            self.show()
+
+    def delete_transaction(self):
+        selection = self.HistoryTable.focus()
+        if not selection:
+            messagebox.showerror("Error", "Select transaction from the table", parent=self.root)
+            return
+
+        transaction = self.transaction_meta.get(selection)
+        if not transaction:
+            messagebox.showerror("Error", "Unable to identify selected transaction", parent=self.root)
+            return
+
+        try:
+            if transaction["source"] == "SALE":
+                invoice = transaction["reference"]
+                if not messagebox.askyesno(
+                    "Confirm",
+                    f"Delete sales transaction for invoice {invoice}?\nThis removes all rows of that invoice.",
+                    parent=self.root,
+                ):
+                    return
+
+                file_deleted, history_deleted_count = self._delete_invoice_data(invoice)
+                if not file_deleted and history_deleted_count == 0:
+                    messagebox.showerror("Error", "Invoice not found", parent=self.root)
+                    return
+
+                self.bill_area.delete("1.0", END)
+                self.var_invoice.set("")
+                messagebox.showinfo("Success", "Sales transaction deleted successfully", parent=self.root)
+            elif transaction["source"] == "STOCK":
+                if not messagebox.askyesno("Confirm", "Delete selected stock transaction?", parent=self.root):
+                    return
+
+                with sqlite3.connect(DB_PATH) as con:
+                    cur = con.cursor()
+                    cur.execute("delete from inventory_history where id=?", (transaction["id"],))
+                    deleted_count = cur.rowcount
+                    con.commit()
+                if deleted_count == 0:
+                    messagebox.showerror("Error", "Transaction not found", parent=self.root)
+                    return
+
+                messagebox.showinfo("Success", "Stock transaction deleted successfully", parent=self.root)
+            else:
+                messagebox.showerror("Error", "Unknown transaction type", parent=self.root)
+                return
+
+            self._refresh_current_view()
+        except Exception as ex:
+            messagebox.showerror("Error", f"Error due to : {str(ex)}", parent=self.root)
 
     def show(self):
         self._load_invoices()
@@ -259,17 +375,7 @@ class salesClass:
             return
 
         try:
-            file_path = os.path.join(BILL_DIR, f"{invoice}.txt")
-            file_deleted = False
-            if os.path.exists(file_path):
-                os.remove(file_path)
-                file_deleted = True
-
-            with sqlite3.connect(DB_PATH) as con:
-                cur = con.cursor()
-                cur.execute("delete from sales_history where invoice=?", (invoice,))
-                history_deleted_count = cur.rowcount
-                con.commit()
+            file_deleted, history_deleted_count = self._delete_invoice_data(invoice)
 
             if not file_deleted and history_deleted_count == 0:
                 messagebox.showerror("Error", "Invoice not found", parent=self.root)
