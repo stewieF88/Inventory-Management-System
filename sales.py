@@ -1,137 +1,291 @@
 from tkinter import *
-from PIL import Image, ImageTk
 from tkinter import ttk, messagebox
-import sqlite3
 import os
+import sqlite3
 
-# ------------------ BASE PATH SETUP ------------------
+from create_db import create_db
+
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-IMAGE_DIR = os.path.join(BASE_DIR, "images")
 BILL_DIR = os.path.join(BASE_DIR, "bill")
+DB_PATH = os.path.join(BASE_DIR, "ims.db")
+FILTER_COLUMN_MAP = {
+    "Employee": "employee",
+    "Product": "product_name",
+    "Category": "category",
+}
 
 os.makedirs(BILL_DIR, exist_ok=True)
-# ---------------------------------------------------
+
 
 class salesClass:
     def __init__(self, root):
+        create_db()
+
         self.root = root
         self.root.geometry("1100x500+320+220")
         self.root.config(bg="white")
         self.root.resizable(False, False)
         self.root.focus_force()
 
-        self.blll_list = []
+        self.invoice_list = []
         self.var_invoice = StringVar()
+        self.var_filter_by = StringVar(value="Select")
+        self.var_filter_txt = StringVar()
 
-        # --------------- title ---------------------
-        lbl_title = Label(
+        Label(
             self.root,
             text="View Customer Bills",
             font=("goudy old style", 30),
             bg="#184a45",
             fg="white",
             bd=3,
-            relief=RIDGE
+            relief=RIDGE,
         ).pack(side=TOP, fill=X, padx=10, pady=20)
 
-        lbl_invoice = Label(self.root, text="Invoice No.", font=("times new roman", 15), bg="white")
-        lbl_invoice.place(x=50, y=100)
+        # Invoice search
+        Label(self.root, text="Invoice No.", font=("times new roman", 13), bg="white").place(x=30, y=92)
+        Entry(self.root, textvariable=self.var_invoice, font=("times new roman", 13), bg="lightyellow").place(x=120, y=92, width=140, height=24)
+        Button(self.root, text="Search", command=self.search, font=("times new roman", 12, "bold"), bg="#2196f3", fg="white").place(x=270, y=92, width=90, height=24)
+        Button(self.root, text="Delete Bill", command=self.delete_bill, font=("times new roman", 12, "bold"), bg="#f44336", fg="white").place(x=370, y=92, width=110, height=24)
+        Button(self.root, text="Clear", command=self.clear, font=("times new roman", 12, "bold"), bg="lightgray").place(x=490, y=92, width=80, height=24)
 
-        txt_invoice = Entry(self.root, textvariable=self.var_invoice, font=("times new roman", 15), bg="lightyellow")
-        txt_invoice.place(x=160, y=100, width=180, height=28)
-
-        btn_search = Button(
-            self.root, text="Search", command=self.search,
-            font=("times new roman", 15, "bold"),
-            bg="#2196f3", fg="white", cursor="hand2"
-        ).place(x=360, y=100, width=120, height=28)
-
-        btn_clear = Button(
-            self.root, text="Clear", command=self.clear,
-            font=("times new roman", 15, "bold"),
-            bg="lightgray", cursor="hand2"
-        ).place(x=490, y=100, width=120, height=28)
-
-        # ----------------- bill list -------------------
-        sales_Frame = Frame(self.root, bd=3, relief=RIDGE)
-        sales_Frame.place(x=50, y=140, width=200, height=330)
-
-        scrolly = Scrollbar(sales_Frame, orient=VERTICAL)
-        self.Sales_List = Listbox(
-            sales_Frame, font=("goudy old style", 15),
-            bg="white", yscrollcommand=scrolly.set
+        # History filter
+        Label(self.root, text="Filter By", font=("times new roman", 13), bg="white").place(x=590, y=92)
+        self.cmb_filter_by = ttk.Combobox(
+            self.root,
+            textvariable=self.var_filter_by,
+            values=("Select", "Employee", "Product", "Category"),
+            state="readonly",
+            justify=CENTER,
+            font=("times new roman", 11),
         )
-        scrolly.pack(side=RIGHT, fill=Y)
-        scrolly.config(command=self.Sales_List.yview)
+        self.cmb_filter_by.place(x=660, y=92, width=120, height=24)
+        self.cmb_filter_by.current(0)
+        Entry(self.root, textvariable=self.var_filter_txt, font=("times new roman", 13), bg="lightyellow").place(x=790, y=92, width=170, height=24)
+        Button(self.root, text="Apply", command=self.apply_filter, font=("times new roman", 12, "bold"), bg="#4caf50", fg="white").place(x=970, y=92, width=80, height=24)
+
+        # Bill list
+        list_frame = Frame(self.root, bd=3, relief=RIDGE)
+        list_frame.place(x=30, y=130, width=220, height=340)
+        list_scroll = Scrollbar(list_frame, orient=VERTICAL)
+        self.Sales_List = Listbox(list_frame, font=("goudy old style", 14), bg="white", yscrollcommand=list_scroll.set)
+        list_scroll.pack(side=RIGHT, fill=Y)
+        list_scroll.config(command=self.Sales_List.yview)
         self.Sales_List.pack(fill=BOTH, expand=1)
         self.Sales_List.bind("<ButtonRelease-1>", self.get_data)
 
-        # --------------- bill area ----------------------
-        bill_Frame = Frame(self.root, bd=3, relief=RIDGE)
-        bill_Frame.place(x=280, y=140, width=410, height=330)
-
-        lbl_title2 = Label(
-            bill_Frame, text="Customer Bill Area",
-            font=("goudy old style", 20), bg="orange"
-        ).pack(side=TOP, fill=X)
-
-        scrolly2 = Scrollbar(bill_Frame, orient=VERTICAL)
-        self.bill_area = Text(bill_Frame, bg="lightyellow", yscrollcommand=scrolly2.set)
-        scrolly2.pack(side=RIGHT, fill=Y)
-        scrolly2.config(command=self.bill_area.yview)
+        # Bill area
+        bill_frame = Frame(self.root, bd=3, relief=RIDGE)
+        bill_frame.place(x=270, y=130, width=430, height=340)
+        Label(bill_frame, text="Customer Bill Area", font=("goudy old style", 20), bg="orange").pack(side=TOP, fill=X)
+        bill_scroll = Scrollbar(bill_frame, orient=VERTICAL)
+        self.bill_area = Text(bill_frame, bg="lightyellow", yscrollcommand=bill_scroll.set)
+        bill_scroll.pack(side=RIGHT, fill=Y)
+        bill_scroll.config(command=self.bill_area.yview)
         self.bill_area.pack(fill=BOTH, expand=1)
 
-        # ------------- image -----------------
-        image_path = os.path.join(IMAGE_DIR, "cat2.jpg")
-        self.bill_photo = Image.open(image_path)
-        self.bill_photo = self.bill_photo.resize((450, 300))
-        self.bill_photo = ImageTk.PhotoImage(self.bill_photo)
+        # Transaction history table (right side)
+        history_frame = Frame(self.root, bd=3, relief=RIDGE)
+        history_frame.place(x=710, y=130, width=360, height=340)
+        Label(history_frame, text="Transaction History", font=("goudy old style", 18), bg="#009688", fg="white").pack(side=TOP, fill=X)
 
-        lbl_image = Label(self.root, image=self.bill_photo, bd=0)
-        lbl_image.place(x=700, y=110)
+        history_inner = Frame(history_frame, bd=1, relief=RIDGE)
+        history_inner.place(x=2, y=35, width=352, height=300)
+        history_scrolly = Scrollbar(history_inner, orient=VERTICAL)
+        history_scrollx = Scrollbar(history_inner, orient=HORIZONTAL)
+        self.HistoryTable = ttk.Treeview(
+            history_inner,
+            columns=("id", "invoice", "employee", "supplier", "product", "category", "qty", "amount"),
+            yscrollcommand=history_scrolly.set,
+            xscrollcommand=history_scrollx.set,
+        )
+        history_scrolly.pack(side=RIGHT, fill=Y)
+        history_scrollx.pack(side=BOTTOM, fill=X)
+        history_scrolly.config(command=self.HistoryTable.yview)
+        history_scrollx.config(command=self.HistoryTable.xview)
+        self.HistoryTable.heading("id", text="ID")
+        self.HistoryTable.heading("invoice", text="Invoice")
+        self.HistoryTable.heading("employee", text="Employee")
+        self.HistoryTable.heading("supplier", text="Supplier")
+        self.HistoryTable.heading("product", text="Product")
+        self.HistoryTable.heading("category", text="Category")
+        self.HistoryTable.heading("qty", text="Qty")
+        self.HistoryTable.heading("amount", text="Amount")
+        self.HistoryTable["show"] = "headings"
+        self.HistoryTable.column("id", width=35)
+        self.HistoryTable.column("invoice", width=75)
+        self.HistoryTable.column("employee", width=95)
+        self.HistoryTable.column("supplier", width=95)
+        self.HistoryTable.column("product", width=90)
+        self.HistoryTable.column("category", width=80)
+        self.HistoryTable.column("qty", width=45)
+        self.HistoryTable.column("amount", width=70)
+        self.HistoryTable.pack(fill=BOTH, expand=1)
 
         self.show()
 
     # -------------------------------------------------------
-    def show(self):
-        del self.blll_list[:]
+    def _run_query(self, query, params=(), *, fetchall=False):
+        with sqlite3.connect(DB_PATH) as con:
+            cur = con.cursor()
+            cur.execute(query, params)
+            if fetchall:
+                return cur.fetchall()
+            con.commit()
+            return None
+
+    def _history_invoices(self, filter_by=None, filter_text=""):
+        if filter_by and filter_text:
+            column_name = FILTER_COLUMN_MAP[filter_by]
+            rows = self._run_query(
+                f"select distinct invoice from sales_history where {column_name} LIKE ? order by id desc",
+                (f"%{filter_text}%",),
+                fetchall=True,
+            )
+        else:
+            rows = self._run_query("select distinct invoice from sales_history order by id desc", fetchall=True)
+        return [str(row[0]) for row in rows]
+
+    def _populate_invoices(self, invoices):
+        self.invoice_list = invoices
         self.Sales_List.delete(0, END)
+        for invoice in invoices:
+            self.Sales_List.insert(END, f"{invoice}.txt")
 
-        for i in os.listdir(BILL_DIR):
-            if i.split('.')[-1] == 'txt':
-                self.Sales_List.insert(END, i)
-                self.blll_list.append(i.split('.')[0])
-
-    def get_data(self, ev):
-        index_ = self.Sales_List.curselection()
-        if not index_:
+    def _display_invoice(self, invoice):
+        file_path = os.path.join(BILL_DIR, f"{invoice}.txt")
+        if not os.path.exists(file_path):
+            messagebox.showerror("Error", "Bill file not found", parent=self.root)
             return
 
-        file_name = self.Sales_List.get(index_)
-        self.bill_area.delete('1.0', END)
+        self.bill_area.delete("1.0", END)
+        with open(file_path, "r", encoding="utf-8") as fp:
+            self.bill_area.insert(END, fp.read())
 
-        file_path = os.path.join(BILL_DIR, file_name)
-        with open(file_path, 'r') as fp:
-            for i in fp:
-                self.bill_area.insert(END, i)
+    def _load_invoices(self, filter_by=None, filter_text=""):
+        history_invoices = self._history_invoices(filter_by, filter_text)
+
+        # Keep compatibility with old bill files without history rows.
+        if filter_by is None:
+            file_invoices = []
+            for file_name in os.listdir(BILL_DIR):
+                if file_name.endswith(".txt"):
+                    file_invoices.append(os.path.splitext(file_name)[0])
+            history_invoices = sorted(set(history_invoices).union(file_invoices), reverse=True)
+
+        self._populate_invoices(history_invoices)
+
+    def _load_transactions(self, filter_by=None, filter_text=""):
+        query = (
+            "select id,invoice,COALESCE(employee,''),COALESCE(supplier,''),COALESCE(product_name,''),"
+            "COALESCE(category,''),COALESCE(quantity,0),COALESCE(line_total,0) from sales_history"
+        )
+        params = []
+        if filter_by and filter_text:
+            column_name = FILTER_COLUMN_MAP[filter_by]
+            query += f" where {column_name} LIKE ?"
+            params.append(f"%{filter_text}%")
+        query += " order by id desc"
+
+        rows = self._run_query(query, tuple(params), fetchall=True)
+        self.HistoryTable.delete(*self.HistoryTable.get_children())
+        for row in rows:
+            self.HistoryTable.insert(
+                "",
+                END,
+                values=(
+                    row[0],
+                    row[1],
+                    row[2],
+                    row[3],
+                    row[4],
+                    row[5],
+                    row[6],
+                    f"{float(row[7]):.2f}",
+                ),
+            )
+
+    def show(self):
+        self._load_invoices()
+        self._load_transactions()
+
+    def get_data(self, _event):
+        selection = self.Sales_List.curselection()
+        if not selection:
+            return
+        file_name = self.Sales_List.get(selection)
+        invoice = os.path.splitext(file_name)[0]
+        self.var_invoice.set(invoice)
+        self._display_invoice(invoice)
 
     def search(self):
-        if self.var_invoice.get() == "":
+        invoice = self.var_invoice.get().strip()
+        if not invoice:
             messagebox.showerror("Error", "Invoice no. should be required", parent=self.root)
-        else:
-            if self.var_invoice.get() in self.blll_list:
-                file_path = os.path.join(BILL_DIR, f"{self.var_invoice.get()}.txt")
-                self.bill_area.delete('1.0', END)
+            return
+        if invoice not in self.invoice_list and not os.path.exists(os.path.join(BILL_DIR, f"{invoice}.txt")):
+            messagebox.showerror("Error", "Invalid Invoice No.", parent=self.root)
+            return
+        self._display_invoice(invoice)
 
-                with open(file_path, 'r') as fp:
-                    for i in fp:
-                        self.bill_area.insert(END, i)
-            else:
-                messagebox.showerror("Error", "Invalid Invoice No.", parent=self.root)
+    def apply_filter(self):
+        filter_by = self.var_filter_by.get().strip()
+        filter_txt = self.var_filter_txt.get().strip()
+        if filter_by == "Select":
+            messagebox.showerror("Error", "Select filter type", parent=self.root)
+            return
+        if not filter_txt:
+            messagebox.showerror("Error", "Filter text is required", parent=self.root)
+            return
+
+        self._load_invoices(filter_by, filter_txt)
+        self._load_transactions(filter_by, filter_txt)
+        if not self.invoice_list:
+            messagebox.showinfo("Info", "No matching history found", parent=self.root)
+
+    def delete_bill(self):
+        invoice = self.var_invoice.get().strip()
+        if not invoice:
+            selection = self.Sales_List.curselection()
+            if selection:
+                invoice = os.path.splitext(self.Sales_List.get(selection))[0]
+
+        if not invoice:
+            messagebox.showerror("Error", "Select or enter invoice to delete", parent=self.root)
+            return
+
+        if not messagebox.askyesno("Confirm", f"Delete bill {invoice}?", parent=self.root):
+            return
+
+        try:
+            file_path = os.path.join(BILL_DIR, f"{invoice}.txt")
+            file_deleted = False
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                file_deleted = True
+
+            with sqlite3.connect(DB_PATH) as con:
+                cur = con.cursor()
+                cur.execute("delete from sales_history where invoice=?", (invoice,))
+                history_deleted_count = cur.rowcount
+                con.commit()
+
+            if not file_deleted and history_deleted_count == 0:
+                messagebox.showerror("Error", "Invoice not found", parent=self.root)
+                return
+
+            messagebox.showinfo("Success", "Bill deleted successfully", parent=self.root)
+            self.clear()
+        except Exception as ex:
+            messagebox.showerror("Error", f"Error due to : {str(ex)}", parent=self.root)
 
     def clear(self):
+        self.var_invoice.set("")
+        self.var_filter_by.set("Select")
+        self.var_filter_txt.set("")
+        self.bill_area.delete("1.0", END)
         self.show()
-        self.bill_area.delete('1.0', END)
 
 
 if __name__ == "__main__":

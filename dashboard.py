@@ -10,6 +10,7 @@ from supplier import supplierClass
 from category import categoryClass
 from product import productClass
 from sales import salesClass
+from create_db import create_db
 
 # ------------------ BASE PATH SETUP ------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -21,6 +22,8 @@ os.makedirs(BILL_DIR, exist_ok=True)
 
 class IMS:
     def __init__(self, root):
+        create_db()
+
         self.root = root
         self.root.geometry("1350x700+110+80")
         self.root.resizable(False, False)

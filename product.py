@@ -3,18 +3,23 @@ from tkinter import ttk, messagebox
 import os
 import sqlite3
 
+from create_db import create_db
+
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "ims.db")
 SEARCH_COLUMN_MAP = {
     "Category": "Category",
     "Supplier": "Supplier",
+    "Employee": "employee",
     "Name": "name",
 }
 
 
 class productClass:
     def __init__(self, root):
+        create_db()
+
         self.root = root
         self.root.geometry("1100x500+320+220")
         self.root.config(bg="white")
@@ -25,6 +30,7 @@ class productClass:
         self.var_cat = StringVar(value="Select")
         self.var_pid = StringVar()
         self.var_sup = StringVar(value="Select")
+        self.var_emp = StringVar(value="Select")
         self.var_name = StringVar()
         self.var_price = StringVar()
         self.var_qty = StringVar()
@@ -34,11 +40,11 @@ class productClass:
 
         self.cat_list = ["Select"]
         self.sup_list = ["Select"]
+        self.emp_list = ["Select"]
 
         product_frame = Frame(self.root, bd=2, relief=RIDGE, bg="white")
         product_frame.place(x=10, y=10, width=450, height=480)
 
-        # ------------ title --------------
         Label(
             product_frame,
             text="Manage Product Details",
@@ -47,12 +53,13 @@ class productClass:
             fg="white",
         ).pack(side=TOP, fill=X)
 
-        Label(product_frame, text="Category", font=("goudy old style", 18), bg="white").place(x=30, y=60)
-        Label(product_frame, text="Supplier", font=("goudy old style", 18), bg="white").place(x=30, y=110)
-        Label(product_frame, text="Name", font=("goudy old style", 18), bg="white").place(x=30, y=160)
-        Label(product_frame, text="Price", font=("goudy old style", 18), bg="white").place(x=30, y=210)
-        Label(product_frame, text="Quantity", font=("goudy old style", 18), bg="white").place(x=30, y=260)
-        Label(product_frame, text="Status", font=("goudy old style", 18), bg="white").place(x=30, y=310)
+        Label(product_frame, text="Category", font=("goudy old style", 16), bg="white").place(x=30, y=40)
+        Label(product_frame, text="Supplier", font=("goudy old style", 16), bg="white").place(x=30, y=85)
+        Label(product_frame, text="Name", font=("goudy old style", 16), bg="white").place(x=30, y=130)
+        Label(product_frame, text="Price", font=("goudy old style", 16), bg="white").place(x=30, y=175)
+        Label(product_frame, text="Quantity", font=("goudy old style", 16), bg="white").place(x=30, y=220)
+        Label(product_frame, text="Employee", font=("goudy old style", 16), bg="white").place(x=30, y=265)
+        Label(product_frame, text="Status", font=("goudy old style", 16), bg="white").place(x=30, y=310)
 
         self.cmb_cat = ttk.Combobox(
             product_frame,
@@ -60,9 +67,9 @@ class productClass:
             values=self.cat_list,
             state="readonly",
             justify=CENTER,
-            font=("goudy old style", 15),
+            font=("goudy old style", 14),
         )
-        self.cmb_cat.place(x=150, y=60, width=200)
+        self.cmb_cat.place(x=150, y=40, width=260)
         self.cmb_cat.current(0)
 
         self.cmb_sup = ttk.Combobox(
@@ -71,20 +78,31 @@ class productClass:
             values=self.sup_list,
             state="readonly",
             justify=CENTER,
-            font=("goudy old style", 15),
+            font=("goudy old style", 14),
         )
-        self.cmb_sup.place(x=150, y=110, width=200)
+        self.cmb_sup.place(x=150, y=85, width=260)
         self.cmb_sup.current(0)
 
-        Entry(product_frame, textvariable=self.var_name, font=("goudy old style", 15), bg="lightyellow").place(
-            x=150, y=160, width=200
+        Entry(product_frame, textvariable=self.var_name, font=("goudy old style", 14), bg="lightyellow").place(
+            x=150, y=130, width=260
         )
-        Entry(product_frame, textvariable=self.var_price, font=("goudy old style", 15), bg="lightyellow").place(
-            x=150, y=210, width=200
+        Entry(product_frame, textvariable=self.var_price, font=("goudy old style", 14), bg="lightyellow").place(
+            x=150, y=175, width=260
         )
-        Entry(product_frame, textvariable=self.var_qty, font=("goudy old style", 15), bg="lightyellow").place(
-            x=150, y=260, width=200
+        Entry(product_frame, textvariable=self.var_qty, font=("goudy old style", 14), bg="lightyellow").place(
+            x=150, y=220, width=260
         )
+
+        self.cmb_emp = ttk.Combobox(
+            product_frame,
+            textvariable=self.var_emp,
+            values=self.emp_list,
+            state="readonly",
+            justify=CENTER,
+            font=("goudy old style", 14),
+        )
+        self.cmb_emp.place(x=150, y=265, width=260)
+        self.cmb_emp.current(0)
 
         cmb_status = ttk.Combobox(
             product_frame,
@@ -92,12 +110,11 @@ class productClass:
             values=("Active", "Inactive"),
             state="readonly",
             justify=CENTER,
-            font=("goudy old style", 15),
+            font=("goudy old style", 14),
         )
-        cmb_status.place(x=150, y=310, width=200)
+        cmb_status.place(x=150, y=310, width=260)
         cmb_status.current(0)
 
-        # -------------- buttons -----------------
         Button(
             product_frame,
             text="Save",
@@ -106,7 +123,7 @@ class productClass:
             bg="#2196f3",
             fg="white",
             cursor="hand2",
-        ).place(x=10, y=400, width=100, height=40)
+        ).place(x=10, y=380, width=100, height=40)
         Button(
             product_frame,
             text="Update",
@@ -115,7 +132,7 @@ class productClass:
             bg="#4caf50",
             fg="white",
             cursor="hand2",
-        ).place(x=120, y=400, width=100, height=40)
+        ).place(x=120, y=380, width=100, height=40)
         Button(
             product_frame,
             text="Delete",
@@ -124,7 +141,7 @@ class productClass:
             bg="#f44336",
             fg="white",
             cursor="hand2",
-        ).place(x=230, y=400, width=100, height=40)
+        ).place(x=230, y=380, width=100, height=40)
         Button(
             product_frame,
             text="Clear",
@@ -133,9 +150,8 @@ class productClass:
             bg="#607d8b",
             fg="white",
             cursor="hand2",
-        ).place(x=340, y=400, width=100, height=40)
+        ).place(x=340, y=380, width=100, height=40)
 
-        # ---------- Search Frame -------------
         search_frame = LabelFrame(
             self.root,
             text="Search Product",
@@ -149,7 +165,7 @@ class productClass:
         cmb_search = ttk.Combobox(
             search_frame,
             textvariable=self.var_searchby,
-            values=("Select", "Category", "Supplier", "Name"),
+            values=("Select", "Category", "Supplier", "Employee", "Name"),
             state="readonly",
             justify=CENTER,
             font=("goudy old style", 15),
@@ -170,7 +186,6 @@ class productClass:
             cursor="hand2",
         ).place(x=410, y=9, width=150, height=30)
 
-        # ------------ product details -------------
         table_frame = Frame(self.root, bd=3, relief=RIDGE)
         table_frame.place(x=480, y=100, width=600, height=390)
 
@@ -179,7 +194,7 @@ class productClass:
 
         self.ProductTable = ttk.Treeview(
             table_frame,
-            columns=("pid", "Category", "Supplier", "name", "price", "qty", "status"),
+            columns=("pid", "Category", "Supplier", "name", "price", "qty", "employee", "status"),
             yscrollcommand=scrolly.set,
             xscrollcommand=scrollx.set,
         )
@@ -193,20 +208,23 @@ class productClass:
         self.ProductTable.heading("name", text="Name")
         self.ProductTable.heading("price", text="Price")
         self.ProductTable.heading("qty", text="Quantity")
+        self.ProductTable.heading("employee", text="Employee")
         self.ProductTable.heading("status", text="Status")
         self.ProductTable["show"] = "headings"
-        self.ProductTable.column("pid", width=90)
-        self.ProductTable.column("Category", width=100)
-        self.ProductTable.column("Supplier", width=100)
-        self.ProductTable.column("name", width=100)
-        self.ProductTable.column("price", width=100)
-        self.ProductTable.column("qty", width=100)
-        self.ProductTable.column("status", width=100)
+        self.ProductTable["displaycolumns"] = ("pid", "Category", "name", "price", "qty", "status")
+        self.ProductTable.column("pid", width=60)
+        self.ProductTable.column("Category", width=90)
+        self.ProductTable.column("Supplier", width=90)
+        self.ProductTable.column("name", width=95)
+        self.ProductTable.column("price", width=75)
+        self.ProductTable.column("qty", width=75)
+        self.ProductTable.column("employee", width=95)
+        self.ProductTable.column("status", width=75)
 
         self.ProductTable.pack(fill=BOTH, expand=1)
         self.ProductTable.bind("<ButtonRelease-1>", self.get_data)
 
-        self.fetch_cat_sup()
+        self.fetch_lookup_data()
         self.show()
 
     # -----------------------------------------------------------------------------------------------------
@@ -247,44 +265,62 @@ class productClass:
             self.var_price.get().strip(),
             self.var_qty.get().strip(),
             self.var_status.get(),
+            self.var_emp.get(),
         )
 
-    def fetch_cat_sup(self):
+    def fetch_lookup_data(self):
         try:
             self.cat_list = ["Select"]
             self.sup_list = ["Select"]
+            self.emp_list = ["Select"]
 
-            categories = self._run_query("select name from category", fetchall=True)
-            suppliers = self._run_query("select name from supplier", fetchall=True)
+            categories = self._run_query("select name from category order by name", fetchall=True)
+            suppliers = self._run_query("select name from supplier order by name", fetchall=True)
+            employees = self._run_query("select name from employee order by name", fetchall=True)
 
             self.cat_list.extend(row[0] for row in categories)
             self.sup_list.extend(row[0] for row in suppliers)
+            self.emp_list.extend(row[0] for row in employees)
 
             self.cmb_cat.config(values=self.cat_list)
             self.cmb_sup.config(values=self.sup_list)
+            self.cmb_emp.config(values=self.emp_list)
 
             if self.var_cat.get() not in self.cat_list:
                 self.var_cat.set("Select")
             if self.var_sup.get() not in self.sup_list:
                 self.var_sup.set("Select")
+            if self.var_emp.get() not in self.emp_list:
+                self.var_emp.set("Select")
         except Exception as ex:
             self._handle_error(ex)
+
+    # Backward compatible name used in older code.
+    def fetch_cat_sup(self):
+        self.fetch_lookup_data()
 
     def add(self):
         category = self.var_cat.get()
         supplier = self.var_sup.get()
-        if self._selection_is_invalid(category) or self._selection_is_invalid(supplier):
+        employee = self.var_emp.get()
+        product_name = self.var_name.get().strip()
+
+        if (
+            self._selection_is_invalid(category)
+            or self._selection_is_invalid(supplier)
+            or self._selection_is_invalid(employee)
+            or not product_name
+        ):
             messagebox.showerror("Error", "All fields are required", parent=self.root)
             return
 
         try:
-            product_name = self.var_name.get().strip()
             if self._run_query("select 1 from product where name=?", (product_name,), fetchone=True):
                 messagebox.showerror("Error", "Product already present", parent=self.root)
                 return
 
             self._run_query(
-                "insert into product(Category,Supplier,name,price,qty,status) values(?,?,?,?,?,?)",
+                "insert into product(Category,Supplier,name,price,qty,status,employee) values(?,?,?,?,?,?,?)",
                 self._product_values(),
             )
             messagebox.showinfo("Success", "Product Added Successfully", parent=self.root)
@@ -294,7 +330,10 @@ class productClass:
 
     def show(self):
         try:
-            rows = self._run_query("select * from product", fetchall=True)
+            rows = self._run_query(
+                "select pid,Category,Supplier,name,price,qty,employee,status from product",
+                fetchall=True,
+            )
             self._populate_product_table(rows)
         except Exception as ex:
             self._handle_error(ex)
@@ -310,7 +349,8 @@ class productClass:
         self.var_name.set(row[3])
         self.var_price.set(row[4])
         self.var_qty.set(row[5])
-        self.var_status.set(row[6])
+        self.var_emp.set(row[6])
+        self.var_status.set(row[7])
 
     def update(self):
         pid = self.var_pid.get().strip()
@@ -324,7 +364,7 @@ class productClass:
                 return
 
             self._run_query(
-                "update product set Category=?,Supplier=?,name=?,price=?,qty=?,status=? where pid=?",
+                "update product set Category=?,Supplier=?,name=?,price=?,qty=?,status=?,employee=? where pid=?",
                 self._product_values() + (pid,),
             )
             messagebox.showinfo("Success", "Product Updated Successfully", parent=self.root)
@@ -355,6 +395,7 @@ class productClass:
     def clear(self):
         self.var_cat.set("Select")
         self.var_sup.set("Select")
+        self.var_emp.set("Select")
         self.var_name.set("")
         self.var_price.set("")
         self.var_qty.set("")
@@ -382,7 +423,7 @@ class productClass:
 
         try:
             rows = self._run_query(
-                f"select * from product where {column_name} LIKE ?",
+                f"select pid,Category,Supplier,name,price,qty,employee,status from product where {column_name} LIKE ?",
                 (f"%{search_text}%",),
                 fetchall=True,
             )
